@@ -4,8 +4,17 @@ export type IssCoordinates = {
 };
 
 export async function fetchIssCoordinates(): Promise<IssCoordinates> {
-  // Call your local proxy route instead of an external proxy
-  const response = await fetch("/api/iss-now", {
+  // 1. Detect if running on localhost
+  const isLocalhost = 
+    window.location.hostname === "localhost" || 
+    window.location.hostname === "127.0.0.1";
+
+  // 2. On localhost, call the direct HTTP API. On Vercel, call your vercel.json rewrite proxy.
+  const url = isLocalhost 
+    ? `http://api.open-notify.org/iss-now.json?_=${Date.now()}` 
+    : "/api/iss-now";
+
+  const response = await fetch(url, {
     cache: "no-store",
   });
 
@@ -20,9 +29,8 @@ export async function fetchIssCoordinates(): Promise<IssCoordinates> {
     };
   };
 
-  // Prevent snapping to 0,0 if the API returns an unexpected payload structure
   if (!data.iss_position?.latitude || !data.iss_position?.longitude) {
-    throw new Error("Malformed data structure received from API");
+    throw new Error("Malformed data structure");
   }
 
   return {
