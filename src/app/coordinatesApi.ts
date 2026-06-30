@@ -4,12 +4,8 @@ export type IssCoordinates = {
 };
 
 export async function fetchIssCoordinates(): Promise<IssCoordinates> {
-  // 1. Using a more reliable proxy
-  // 2. Appending a timestamp (&_=${Date.now()}) to force fresh data every single second
-  const targetUrl = encodeURIComponent(`http://api.open-notify.org/iss-now.json?_=${Date.now()}`);
-  const url = `https://corsproxy.io/?url=${targetUrl}`;
-
-  const response = await fetch(url, {
+  // Call your local proxy route instead of an external proxy
+  const response = await fetch("/api/iss-now", {
     cache: "no-store",
   });
 
@@ -24,8 +20,13 @@ export async function fetchIssCoordinates(): Promise<IssCoordinates> {
     };
   };
 
+  // Prevent snapping to 0,0 if the API returns an unexpected payload structure
+  if (!data.iss_position?.latitude || !data.iss_position?.longitude) {
+    throw new Error("Malformed data structure received from API");
+  }
+
   return {
-    latitude: data.iss_position?.latitude ?? "0.0000",
-    longitude: data.iss_position?.longitude ?? "0.0000",
+    latitude: data.iss_position.latitude,
+    longitude: data.iss_position.longitude,
   };
 }
