@@ -4,7 +4,12 @@ export type IssCoordinates = {
 };
 
 export async function fetchIssCoordinates(): Promise<IssCoordinates> {
-  const response = await fetch("http://api.open-notify.org/iss-now.json", {
+  // 1. Using a more reliable proxy
+  // 2. Appending a timestamp (&_=${Date.now()}) to force fresh data every single second
+  const targetUrl = encodeURIComponent(`http://api.open-notify.org/iss-now.json?_=${Date.now()}`);
+  const url = `https://corsproxy.io/?url=${targetUrl}`;
+
+  const response = await fetch(url, {
     cache: "no-store",
   });
 
