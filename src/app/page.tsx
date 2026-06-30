@@ -15,21 +15,18 @@ type MapPoint = {
 const coordinateMapper = (
   latitude: string,
   longitude: string,
-  canvasWidth: number,
-  canvasHeight: number,
+  mapWidth: number,
+  mapHeight: number,
+  offsetX: number,
+  offsetY: number,
 ): MapPoint => {
   const parsedLatitude = Number.parseFloat(latitude);
   const parsedLongitude = Number.parseFloat(longitude);
 
-  const mapWidthCandidate = canvasWidth;
-  const mapHeightCandidate = mapWidthCandidate / MAP_ASPECT_RATIO;
-  const mapWidth = mapHeightCandidate > canvasHeight ? canvasHeight * MAP_ASPECT_RATIO : mapWidthCandidate;
-  const mapHeight = mapHeightCandidate > canvasHeight ? canvasHeight : mapHeightCandidate;
-  const offsetX = (canvasWidth - mapWidth) / 2;
-  const offsetY = (canvasHeight - mapHeight) / 2;
-
   const normalizedLongitude = (parsedLongitude + 180) / 360;
   const latitudeRadians = (parsedLatitude * Math.PI) / 180;
+  
+  // Gall-Peters projection formula
   const normalizedLatitude = 0.5 - 0.5 * Math.sin(latitudeRadians);
 
   return {
@@ -38,27 +35,29 @@ const coordinateMapper = (
   };
 };
 
-
 export default function CanvasComponent() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const mapImageRef = useRef<HTMLImageElement | null>(null);
   const [issCoordinates, setIssCoordinates] = useState({
     latitude: "0.0000",
     longitude: "0.0000",
   });
 
+  // Preload the map image cleanly in the client
   useEffect(() => {
-    let isMounted = true;
+    const img = new Image();
+    img.src = "/gall-peters-projection.png";
+    img.onload = () => {
+      mapImageRef.current = img;
+    };
 
+    let isMounted = true;
     const loadCoordinates = async () => {
       try {
         const nextCoordinates = await fetchIssCoordinates();
-        if (isMounted) {
-          setIssCoordinates(nextCoordinates);
-        }
+        if (isMounted) setIssCoordinates(nextCoordinates);
       } catch {
-        if (isMounted) {
-          setIssCoordinates({ latitude: "0.0000", longitude: "0.0000" });
-        }
+        if (isMounted) setIssCoordinates({ latitude: "0.0000", longitude: "0.0000" });
       }
     };
 
@@ -91,13 +90,30 @@ export default function CanvasComponent() {
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
+      // Calculate perfect aspect ratio fitting (contain)
+      const mapWidthCandidate = width;
+      const mapHeightCandidate = mapWidthCandidate / MAP_ASPECT_RATIO;
+      const mapWidth = mapHeightCandidate > height ? height * MAP_ASPECT_RATIO : mapWidthCandidate;
+      const mapHeight = mapHeightCandidate > height ? height : mapHeightCandidate;
+      const offsetX = (width - mapWidth) / 2;
+      const offsetY = (height - mapHeight) / 2;
+
+      // 1. Draw the map image directly on the canvas background
+      if (mapImageRef.current) {
+        ctx.drawImage(mapImageRef.current, offsetX, offsetY, mapWidth, mapHeight);
+      }
+
+      // 2. Map coordinates relative to the exact drawn image bounds
       const point = coordinateMapper(
         issCoordinates.latitude,
         issCoordinates.longitude,
-        width,
-        height,
+        mapWidth,
+        mapHeight,
+        offsetX,
+        offsetY
       );
 
+      // 3. Draw the ISS tracking dot
       ctx.beginPath();
       ctx.fillStyle = "#ef4444";
       ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
@@ -113,10 +129,11 @@ export default function CanvasComponent() {
   }, [issCoordinates]);
 
   return (
-    <div className="relative min-h-screen w-screen overflow-hidden bg-black bg-[url('/gall-peters-projection.png')] bg-contain bg-center bg-no-repeat">
+    // Removed the Tailwind background utilities here
+    <div className="relative min-h-screen w-screen overflow-hidden bg-black">
       <canvas
         ref={canvasRef}
-        className="pointer-events-none absolute inset-0 h-full w-full"
+        className="absolute inset-0 h-full w-full"
       />
       <div className="absolute bottom-4 left-4 rounded-md bg-black/55 px-3 py-2 text-sm text-white backdrop-blur-sm">
         <div>Latitude: {issCoordinates.latitude}</div>
