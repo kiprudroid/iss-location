@@ -8,7 +8,7 @@ const MAP_IMAGE_HEIGHT = 817;
 const MAP_ASPECT_RATIO = MAP_IMAGE_WIDTH / MAP_IMAGE_HEIGHT;
 
 // Trail config: max points retained (oldest dropped beyond this)
-const TRAIL_MAX_POINTS = 150;
+const TRAIL_MAX_POINTS = 600;
 
 // Lucide Satellite SVG path (24x24 viewBox, we'll scale it)
 const SATELLITE_SVG = `
