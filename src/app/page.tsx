@@ -25,7 +25,7 @@ const coordinateMapper = (
 
   const normalizedLongitude = (parsedLongitude + 180) / 360;
   const latitudeRadians = (parsedLatitude * Math.PI) / 180;
-  
+
   // Gall-Peters projection formula
   const normalizedLatitude = 0.5 - 0.5 * Math.sin(latitudeRadians);
 
@@ -43,21 +43,29 @@ export default function CanvasComponent() {
     longitude: "0.0000",
   });
 
-  // Preload the map image cleanly in the client
+  const coordinatesRef = useRef(issCoordinates);
+  coordinatesRef.current = issCoordinates;
+
+  // Preload the map image
   useEffect(() => {
     const img = new Image();
     img.src = "/gall-peters-projection.png";
     img.onload = () => {
       mapImageRef.current = img;
     };
+  }, []);
 
+  // Poll ISS coordinates every second
+  useEffect(() => {
     let isMounted = true;
+
     const loadCoordinates = async () => {
       try {
         const nextCoordinates = await fetchIssCoordinates();
         if (isMounted) setIssCoordinates(nextCoordinates);
       } catch {
-        if (isMounted) setIssCoordinates({ latitude: "0.0000", longitude: "0.0000" });
+        if (isMounted)
+          setIssCoordinates({ latitude: "0.0000", longitude: "0.0000" });
       }
     };
 
@@ -70,19 +78,28 @@ export default function CanvasComponent() {
     };
   }, []);
 
+  // Render loop using requestAnimationFrame for continuous accurate rendering
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    let animationId: number;
 
     const drawFrame = () => {
       const width = window.innerWidth;
       const height = window.innerHeight;
       const scale = window.devicePixelRatio || 1;
 
-      canvas.width = Math.floor(width * scale);
-      canvas.height = Math.floor(height * scale);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      const needsResize =
+        canvas.width !== Math.floor(width * scale) ||
+        canvas.height !== Math.floor(height * scale);
+
+      if (needsResize) {
+        canvas.width = Math.floor(width * scale);
+        canvas.height = Math.floor(height * scale);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+      }
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
@@ -93,48 +110,57 @@ export default function CanvasComponent() {
       // Calculate perfect aspect ratio fitting (contain)
       const mapWidthCandidate = width;
       const mapHeightCandidate = mapWidthCandidate / MAP_ASPECT_RATIO;
-      const mapWidth = mapHeightCandidate > height ? height * MAP_ASPECT_RATIO : mapWidthCandidate;
-      const mapHeight = mapHeightCandidate > height ? height : mapHeightCandidate;
+      const mapWidth =
+        mapHeightCandidate > height
+          ? height * MAP_ASPECT_RATIO
+          : mapWidthCandidate;
+      const mapHeight =
+        mapHeightCandidate > height ? height : mapHeightCandidate;
       const offsetX = (width - mapWidth) / 2;
       const offsetY = (height - mapHeight) / 2;
 
       // 1. Draw the map image directly on the canvas background
       if (mapImageRef.current) {
-        ctx.drawImage(mapImageRef.current, offsetX, offsetY, mapWidth, mapHeight);
+        ctx.drawImage(
+          mapImageRef.current,
+          offsetX,
+          offsetY,
+          mapWidth,
+          mapHeight,
+        );
       }
 
       // 2. Map coordinates relative to the exact drawn image bounds
+      const coords = coordinatesRef.current;
       const point = coordinateMapper(
-        issCoordinates.latitude,
-        issCoordinates.longitude,
+        coords.latitude,
+        coords.longitude,
         mapWidth,
         mapHeight,
         offsetX,
-        offsetY
+        offsetY,
       );
 
-      // 3. Draw the ISS tracking dot
+      // 3. Draw the ISS tracking dot (scale radius proportionally to screen size)
+      const dotRadius = Math.max(4, Math.min(8, Math.round(width / 200)));
       ctx.beginPath();
       ctx.fillStyle = "#ef4444";
-      ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, dotRadius, 0, Math.PI * 2);
       ctx.fill();
+
+      animationId = requestAnimationFrame(drawFrame);
     };
 
-    drawFrame();
-    window.addEventListener("resize", drawFrame);
+    animationId = requestAnimationFrame(drawFrame);
 
     return () => {
-      window.removeEventListener("resize", drawFrame);
+      cancelAnimationFrame(animationId);
     };
-  }, [issCoordinates]);
+  }, []);
 
   return (
-    // Removed the Tailwind background utilities here
     <div className="relative min-h-screen w-screen overflow-hidden bg-black">
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 h-full w-full"
-      />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       <div className="absolute bottom-4 left-4 rounded-md bg-black/55 px-3 py-2 text-sm text-white backdrop-blur-sm">
         <div>Latitude: {issCoordinates.latitude}</div>
         <div>Longitude: {issCoordinates.longitude}</div>
