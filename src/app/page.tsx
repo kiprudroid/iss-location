@@ -7,6 +7,17 @@ const MAP_IMAGE_WIDTH = 1280;
 const MAP_IMAGE_HEIGHT = 817;
 const MAP_ASPECT_RATIO = MAP_IMAGE_WIDTH / MAP_IMAGE_HEIGHT;
 
+// Lucide Satellite SVG path (24x24 viewBox, we'll scale it)
+const SATELLITE_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+  fill="none" stroke="%2300ff41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M13 7L9 3 5 7l4 4"/>
+  <path d="m17 11 4 4-4 4-4-4"/>
+  <path d="m8 12 4 4 6-6-4-4Z"/>
+  <path d="m16 8 3-3"/>
+  <path d="M9 21a6 6 0 0 0-6-6"/>
+</svg>`;
+
 type MapPoint = {
   x: number;
   y: number;
@@ -38,6 +49,7 @@ const coordinateMapper = (
 export default function CanvasComponent() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mapImageRef = useRef<HTMLImageElement | null>(null);
+  const satelliteImageRef = useRef<HTMLImageElement | null>(null);
   const [issCoordinates, setIssCoordinates] = useState({
     latitude: "0.0000",
     longitude: "0.0000",
@@ -46,12 +58,19 @@ export default function CanvasComponent() {
   const coordinatesRef = useRef(issCoordinates);
   coordinatesRef.current = issCoordinates;
 
-  // Preload the map image
+  // Preload the map image and satellite icon
   useEffect(() => {
-    const img = new Image();
-    img.src = "/gall-peters-projection.png";
-    img.onload = () => {
-      mapImageRef.current = img;
+    const mapImg = new Image();
+    mapImg.src = "/gall-peters-projection.png";
+    mapImg.onload = () => {
+      mapImageRef.current = mapImg;
+    };
+
+    // Create satellite icon from SVG data URI
+    const satImg = new Image();
+    satImg.src = `data:image/svg+xml,${SATELLITE_SVG}`;
+    satImg.onload = () => {
+      satelliteImageRef.current = satImg;
     };
   }, []);
 
@@ -141,12 +160,24 @@ export default function CanvasComponent() {
         offsetY,
       );
 
-      // 3. Draw the ISS tracking dot (scale radius proportionally to screen size)
-      const dotRadius = Math.max(4, Math.min(8, Math.round(width / 200)));
-      ctx.beginPath();
-      ctx.fillStyle = "#ef4444";
-      ctx.arc(point.x, point.y, dotRadius, 0, Math.PI * 2);
-      ctx.fill();
+      // 3. Draw satellite icon centered on ISS position
+      const iconSize = Math.max(20, Math.min(36, Math.round(width / 30)));
+      if (satelliteImageRef.current) {
+        ctx.drawImage(
+          satelliteImageRef.current,
+          point.x - iconSize / 2,
+          point.y - iconSize / 2,
+          iconSize,
+          iconSize,
+        );
+      } else {
+        // Fallback: green dot while icon loads
+        const dotRadius = Math.max(4, Math.min(8, Math.round(width / 200)));
+        ctx.beginPath();
+        ctx.fillStyle = "#00ff41";
+        ctx.arc(point.x, point.y, dotRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       animationId = requestAnimationFrame(drawFrame);
     };
@@ -161,9 +192,22 @@ export default function CanvasComponent() {
   return (
     <div className="relative min-h-screen w-screen overflow-hidden bg-black">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-      <div className="absolute bottom-4 left-4 rounded-md bg-black/55 px-3 py-2 text-sm text-white backdrop-blur-sm">
-        <div>Latitude: {issCoordinates.latitude}</div>
-        <div>Longitude: {issCoordinates.longitude}</div>
+      <div className="terminal-scanlines relative absolute bottom-4 left-4 rounded border border-[#00ff41]/30 bg-black/70 px-4 py-3 font-mono text-xs tracking-widest backdrop-blur-sm sm:text-sm">
+        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.3em] text-[#00ff41]/60 sm:text-xs">
+          {"// ISS TELEMETRY"}
+        </div>
+        <div className="terminal-glow flex items-center gap-2 text-[#00ff41]">
+          <span className="text-[#00ff41]/50">LAT</span>
+          <span className="tabular-nums">{issCoordinates.latitude}</span>
+        </div>
+        <div className="terminal-glow flex items-center gap-2 text-[#00ff41]">
+          <span className="text-[#00ff41]/50">LON</span>
+          <span className="tabular-nums">{issCoordinates.longitude}</span>
+        </div>
+        <div className="mt-1 h-px w-full bg-[#00ff41]/10" />
+        <div className="terminal-blink mt-1 text-[10px] text-[#00ff41]/40">
+          STATUS: TRACKING
+        </div>
       </div>
     </div>
   );
